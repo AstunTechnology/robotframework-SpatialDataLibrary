@@ -39,7 +39,7 @@ class SpatialDataLibrary(DatabaseLibrary):
 
 
     def table_extent_should_equal(self, tablename, extent,
-                                  geometry_column='wkb_geometry'):
+                                  geometry_column=None):
         """
 
         Checks that the bounding box of a given table matches that specified.
@@ -52,7 +52,17 @@ class SpatialDataLibrary(DatabaseLibrary):
         Units are those used by the projection defined for the table (metres
         for the above example, where the table is in EPSG:27700).
 
+        If no geometry column name is specified then it is looked for in the
+        database, if that fails then it defaults to "wkb_geometry".
+
         """
+
+        if not geometry_column:
+            try:
+                geometry_column = self.get_geometry_column(tablename)
+            except:
+                geometry_column = 'wkb_geometry'
+
         statement = 'SELECT ST_Extent("{}") FROM {};'.format(geometry_column,
                                                           tablename)
         bounds = extent.split(',')
