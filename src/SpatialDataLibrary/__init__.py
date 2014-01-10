@@ -38,33 +38,9 @@ class SpatialDataLibrary(DatabaseLibrary):
         return self._get_single_result(statement)
 
 
-    def table_extent_should_equal(self, tablename, extent,
-                                  geometry_column=None):
-        """
-
-        Checks that the bounding box of a given table matches that specified.
-
-        Bounding box must be specified as a comma separated string of the form
-        MinX,MinY,MaxX,MaxY, for example:
-
-        | Table Extent Should Equal | my_table | 100000,300000,200000,400000 |
-
-        Units are those used by the projection defined for the table (metres
-        for the above example, where the table is in EPSG:27700).
-
-        If no geometry column name is specified then it is looked for in the
-        database, if that fails then it defaults to "wkb_geometry".
-
-        """
-
-        if not geometry_column:
-            try:
-                geometry_column = self.get_geometry_column(tablename)
-            except:
-                geometry_column = 'wkb_geometry'
-
+    def __extent_should_equal(self, source, extent, geometry_column):
         statement = 'SELECT ST_Extent("{}") FROM {};'.format(geometry_column,
-                                                          tablename)
+                                                          source)
         bounds = extent.split(',')
         if len(bounds) != 4:
             msg = 'Wrong number of points in extent: {}'.format(len(bounds))
@@ -87,6 +63,63 @@ class SpatialDataLibrary(DatabaseLibrary):
 
         if len(errors):
             raise AssertionError('\n'.join(errors))
+
+
+    def data_extent_should_equal(self, statement, extent,
+                                 geometry_column='wkb_geometry'):
+        """
+
+        Checks that the bounding box of a given select statement matches that
+        specified in the second parameter.
+
+        Bounding box must be specified as a comma separated string of the form
+        MinX,MinY,MaxX,MaxY, for example:
+
+        | Table Extent Should Equal | SELECT * FROM my_table WHERE type = 1 | 100000,300000,200000,400000 |
+        | Table Extent Should Equal | SELECT * FROM my_table WHERE type = 1 | 100000,300000,200000,400000 | my_geom |
+
+        Units are those used by the projection defined for the returned
+        geometries. What happens when geometries using more than projection
+        are return is undefined.
+
+        Unlike Table Extent Should Equal, the name of the geometry column
+        will always be "wkb_geometry" if not specified.
+
+        """
+        if not geometry_column:
+            geometry_column = 'wkb_geometry'
+        self.__extent_should_equal('({}) AS source'.format(statement),
+                                          extent, geometry_column)
+
+
+    def table_extent_should_equal(self, tablename, extent,
+                                  geometry_column=None):
+        """
+
+        Checks that the bounding box of a given table matches that specified.
+
+        Bounding box must be specified as a comma separated string of the form
+        MinX,MinY,MaxX,MaxY, for example:
+
+        | Table Extent Should Equal | my_table | 100000,300000,200000,400000 |
+        | Table Extent Should Equal | my_table | 100000,300000,200000,400000 | my_geom |
+
+        Units are those used by the projection defined for the geometries
+        (metres for the above example, where the table is in EPSG:27700).
+
+        If no geometry column name is specified then it is looked for in the
+        database, if that fails then it defaults to "wkb_geometry".
+
+        """
+
+        if not geometry_column:
+            try:
+                geometry_column = self.get_geometry_column(tablename)
+            except:
+                geometry_column = 'wkb_geometry'
+
+        self.__extent_should_equal(tablename, extent, geometry_column)
+
 
 
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
