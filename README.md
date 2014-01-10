@@ -1,23 +1,31 @@
-= SpatialDataLibrary for Robot Framework
-== Description
+SpatialDataLibrary for Robot Framework
+======================================
+
+Description
+-----------
 This library is intended for testing of the quality of spatial data stored in a database with a suitable spatial library that implements `ST_` functions.
 
-== Requirements
+Requirements
+------------
 * Python 2.7
 * Robot Framework 2.8
 * DatabaseLibrary 0.6-at (Astun extended version)
 
-== Tested environments
+Tested environments
+-------------------
 So far this library has only been tested in the following environments:
+
 | Database + version | Spatial library + version |
 |--------------------|---------------------------|
 | PostgreSQL 9.1     | PostGIS 1.5               |
 
-== API ==
+API
+---
 See DatabaseLibrary documentation for lower-level actions, including connecting to a database.
 *TODO*
 
-== License
+License
+-------
 ```
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
