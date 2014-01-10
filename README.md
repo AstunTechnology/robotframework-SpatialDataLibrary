@@ -19,10 +19,9 @@ So far this library has only been tested in the following environments:
 |--------------------|---------------------------|
 | PostgreSQL 9.1     | PostGIS 1.5               |
 
-API
+Use
 ---
-See DatabaseLibrary documentation for lower-level actions, including connecting to a database.
-*TODO*
+[See documentation](doc/SpatialDataLibrary.html)
 
 License
 -------

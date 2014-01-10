@@ -25,6 +25,8 @@ class SpatialDataLibrary(DatabaseLibrary):
 
     def get_geometry_column(self, tablename):
         """
+        Finds the name for the geometry column for table `tablename`.
+
         Gets the geometry column name from "geometry_columns", example:
         | ${col} | Get Geometry Column | my_table |
         | Should Be Equal | wkb_geometry | ${col} |
@@ -68,9 +70,7 @@ class SpatialDataLibrary(DatabaseLibrary):
     def data_extent_should_equal(self, statement, extent,
                                  geometry_column='wkb_geometry'):
         """
-
-        Checks that the bounding box of a given select statement matches that
-        specified in the second parameter.
+        Checks the extents of the geometries returned by a SELECT query.
 
         Bounding box must be specified as a comma separated string of the form
         MinX,MinY,MaxX,MaxY, for example:
@@ -119,6 +119,8 @@ class SpatialDataLibrary(DatabaseLibrary):
                 geometry_column = 'wkb_geometry'
 
         self.__extent_should_equal(tablename, extent, geometry_column)
+
+
 
 
 
