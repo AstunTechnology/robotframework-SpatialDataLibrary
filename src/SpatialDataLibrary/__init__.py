@@ -10,6 +10,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+import re
+
 from DatabaseLibrary import DatabaseLibrary
 
 from robot.api import logger
@@ -209,6 +211,27 @@ class SpatialDataLibrary(DatabaseLibrary):
             geometry_column = self.get_geometry_column(tablename)
         columns = self.describe_table(tablename)
         self.__contains_no_slivers(tablename, factor, geometry_column, columns)
+
+
+    def get_geometry(self, statement):
+        """
+        Returns a geometry in WKT format
+
+        The `statement` **must** be a SELECT that returns a single row that
+        contains only the geometry column, for example:
+
+        | ${the_geom} | Get Geometry | SELECT wkb_geometry FROM my_table |
+        """
+        re_result = re.search('SELECT (.*) FROM.*', statement, re.I)
+        geometry_column = re_result.group(1)
+        if geometry_column:
+            logger.debug('Geometry column found: {}'.format(geometry_column))
+        else:
+            raise RuntimeError('Geometry column not found in {}'.format(
+                               statement))
+        wkt_statement = ('SELECT ST_AsText({}) FROM ({}) g;'.format(
+                         geometry_column, statement.rstrip(';')))
+        return self._get_single_result(wkt_statement)
 
 
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
