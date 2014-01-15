@@ -120,11 +120,18 @@ class SpatialDataLibrary(DatabaseLibrary):
         self.__extent_should_equal(tablename, extent, geometry_column)
 
 
-    def __contains_no_slivers(self, source, factor, geometry_column):
+    def __contains_no_slivers(self, source, factor, geometry_column, columns):
         assert factor < 1
+        logger.debug((source, factor, geometry_column, columns))
+        column_names = []
+        for column in columns:
+            if column.name != geometry_column.strip('" '):
+                column_names.append('"{}"'.format(column.name))
+        column_expr = '''
+                , '''.join(column_names)
         statement = '''
             SELECT
-                *
+                {2}
             FROM {0}
             WHERE
                 ST_GeometryType({1}) IN ('ST_Polygon', 'ST_MultiPolygon')
@@ -135,9 +142,13 @@ class SpatialDataLibrary(DatabaseLibrary):
                         4 * pi()
                     )
                 ) < 0.10
-            ;'''.format(source, geometry_column)
+            ;'''.format(source, geometry_column, column_expr)
 
-        self.query_should_not_return_rows(statement)
+        try:
+            self.query_should_not_return_rows(statement)
+        except AssertionError:
+            raise AssertionError('Slivers found, see log for details')
+
 
 
     def query_contains_no_slivers(self, statement, factor=0.05,
@@ -171,8 +182,9 @@ class SpatialDataLibrary(DatabaseLibrary):
 
         """
         statement = statement.rstrip(';')
+        columns = self.describe_data(statement)
         self.__contains_no_slivers('({}) AS source'.format(statement), factor,
-                                   geometry_column)
+                                   geometry_column, columns)
 
 
     def table_contains_no_slivers(self, tablename, factor=0.05,
@@ -195,8 +207,8 @@ class SpatialDataLibrary(DatabaseLibrary):
         """
         if not geometry_column:
             geometry_column = self.get_geometry_column(tablename)
-
-        self.__contains_no_slivers(tablename, factor, geometry_column)
+        columns = self.describe_table(tablename)
+        self.__contains_no_slivers(tablename, factor, geometry_column, columns)
 
 
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
