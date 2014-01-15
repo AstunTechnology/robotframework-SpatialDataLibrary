@@ -220,7 +220,7 @@ class SpatialDataLibrary(DatabaseLibrary):
         The `statement` **must** be a SELECT that returns a single row that
         contains only the geometry column, for example:
 
-        | ${the_geom} | Get Geometry | SELECT wkb_geometry FROM my_table |
+        | ${the_geom} | Get Geometry | SELECT wkb_geometry FROM my_table WHERE id = 1 |
         """
         re_result = re.search('SELECT (.*) FROM.*', statement, re.I)
         geometry_column = re_result.group(1)
@@ -232,6 +232,67 @@ class SpatialDataLibrary(DatabaseLibrary):
         wkt_statement = ('SELECT ST_AsText({}) FROM ({}) g;'.format(
                          geometry_column, statement.rstrip(';')))
         return self._get_single_result(wkt_statement)
+
+
+    def __test_intersect(self, geometryA, geometryB):
+        return self.call_function('ST_Intersects',
+                                  self._value_to_text(geometryA),
+                                  self._value_to_text(geometryB))
+
+
+    def should_intersect(self, geometryA, geometryB):
+        """
+        Checks that two supplied geometries intersect
+
+        Geometries must be specified as WKT strings, for example:
+        | Should Intersect | LINESTRING ( 2 0, 0 2 ) | LINESTRING ( 0 0, 0 2 ) |
+
+        This is probably more useful when used with `Get Geometry`:
+        | ${geomA} | Get Geometry | SELECT geom FROM my_areas WHERE id = 1 |
+        | ${geomB} | Get Geometry | SELECT geom FROM my_areas WHERE id = 2 |
+        | Should Intersect | ${geomA} | ${geomB} |
+
+        """
+        if not self.__test_intersect(geometryA, geometryB):
+            raise AssertionError('Geometries do not intersect')
+
+
+    def should_not_intersect(self, geometryA, geometryB):
+        """
+        Checks that two supplied geometries  do not intersect
+
+        Geometries must be specified as WKT strings, for example:
+        | Should Intersect | LINESTRING ( 2 0, 0 2 ) | LINESTRING ( 0 0, 0 2 ) |
+
+        This is probably more useful when used with `Get Geometry`:
+        | ${geomA} | Get Geometry | SELECT geom FROM my_areas WHERE id = 1 |
+        | ${geomB} | Get Geometry | SELECT geom FROM my_areas WHERE id = 2 |
+        | Should Intersect | ${geomA} | ${geomB} |
+
+        """
+        if self.__test_intersect(geometryA, geometryB):
+            raise AssertionError('Geometries do not intersect')
+
+
+    def should_intersect_query(self, geometry, statement,
+                               geometry_column='wkb_geometry'):
+        """
+        Checks that the `geometry` intersects with all features in `statement`
+
+        Geometries must be specified as WKT strings, for example:
+        | Should Intersect Query | LINESTRING ( 2 0, 0 2 ) | SELECT * FROM my_points WHERE type = 1 |
+
+        This is probably more useful when used with `Get Geometry`:
+        | ${geomA} | Get Geometry | SELECT geom FROM my_areas WHERE id = 1 |
+        | Should Intersect Query | ${geomA} | SELECT * FROM my_points WHERE type = 1 |
+
+        """
+        pass
+
+
+    def should_intersect_table(self, geometry, tablename,
+                               geometry_column=None):
+        pass
 
 
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
