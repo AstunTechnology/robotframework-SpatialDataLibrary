@@ -23,7 +23,7 @@ class SpatialDataLibrary(DatabaseLibrary):
     """
     """
 
-    def get_geometry_column(self, tablename):
+    def get_geometry_column(self, tablename, default='wkb_geometry'):
         """
         Finds the name for the geometry column for table `tablename`.
 
@@ -32,12 +32,15 @@ class SpatialDataLibrary(DatabaseLibrary):
         | Should Be Equal | wkb_geometry | ${col} |
 
         """
-        self.table_must_exist(tablename)
-        statement = '''
-        SELECT f_geometry_column
-        FROM geometry_columns
-        WHERE f_table_name = '{}';'''.format(tablename)
-        return self._get_single_result(statement)
+        try:
+            self.table_must_exist(tablename)
+            statement = '''
+                SELECT f_geometry_column
+                FROM geometry_columns
+                WHERE f_table_name = '{}';'''.format(tablename)
+            return self._get_single_result(statement)
+        except:
+            return default
 
 
     def __extent_should_equal(self, source, extent, geometry_column):
@@ -76,7 +79,7 @@ class SpatialDataLibrary(DatabaseLibrary):
         MinX,MinY,MaxX,MaxY, for example:
 
         | Table Extent Should Equal | SELECT * FROM my_table WHERE type = 1 | 100000,300000,200000,400000 |
-        | Table Extent Should Equal | SELECT * FROM my_table WHERE type = 1 | 100000,300000,200000,400000 | my_geom |
+        | Table Extent Should Equal | SELECT * FROM my_table WHERE type = 1 | 100000,300000,200000,400000 | geometry_column=my_geom |
 
         Units are those used by the projection defined for the returned
         geometries. What happens when geometries using more than projection
@@ -86,8 +89,7 @@ class SpatialDataLibrary(DatabaseLibrary):
         will always be "wkb_geometry" if not specified.
 
         """
-        if not geometry_column:
-            geometry_column = 'wkb_geometry'
+        statement = statement.rstrip(';')
         self.__extent_should_equal('({}) AS source'.format(statement),
                                           extent, geometry_column)
 
@@ -102,26 +104,99 @@ class SpatialDataLibrary(DatabaseLibrary):
         MinX,MinY,MaxX,MaxY, for example:
 
         | Table Extent Should Equal | my_table | 100000,300000,200000,400000 |
-        | Table Extent Should Equal | my_table | 100000,300000,200000,400000 | my_geom |
+        | Table Extent Should Equal | my_table | 100000,300000,200000,400000 | geometry_column=my_geom |
 
         Units are those used by the projection defined for the geometries
         (metres for the above example, where the table is in EPSG:27700).
 
         If no geometry column name is specified then it is looked for in the
-        database, if that fails then it defaults to "wkb_geometry".
+        database, if that fails then it defaults to _wkb_geometry_.
 
         """
 
         if not geometry_column:
-            try:
-                geometry_column = self.get_geometry_column(tablename)
-            except:
-                geometry_column = 'wkb_geometry'
+            geometry_column = self.get_geometry_column(tablename)
 
         self.__extent_should_equal(tablename, extent, geometry_column)
 
 
+    def __contains_no_slivers(self, source, factor, geometry_column):
+        assert factor < 1
+        statement = '''
+            SELECT
+                *
+            FROM {0}
+            WHERE
+                ST_GeometryType({1}) IN ('ST_Polygon', 'ST_MultiPolygon')
+                AND	ST_Area({1})/(
+                    (
+                        ST_Perimeter({1}) * ST_Perimeter({1})
+                    )/(
+                        4 * pi()
+                    )
+                ) < 0.10
+            ;'''.format(source, geometry_column)
 
+        self.query_should_not_return_rows(statement)
+
+
+    def query_contains_no_slivers(self, statement, factor=0.05,
+                                  geometry_column='wkb_geometry'):
+        """
+        Tests whether the data returned by `statement` contains 'slivers'
+
+        If it does then an AssertionError is thrown and the rows containing
+        slivers are logged.
+
+        *Note*: the test will select only POLYGON and MULTIPOLYGON geometries
+        from the results: all others are ignored. All matching rows are checked
+        every time this test is run, even when one or more fails the test.
+
+        This test works by comparing the area of the geometry to that for an
+        circle with the same perimeter - the largest possible area for
+        that perimeter. If the area of a geometry is smaller than the 'ideal'
+        multiplied by the given `factor` then the test is failed.
+
+        By default `factor` is equal to _0.05_ i.e. all geometries are expected
+        to have an area more than 5% of the maximum. This should be tuned for a
+        given query if the data contains valid narrow geometries.
+
+        If no `geometry_column` is supplied then _wkb_geometry_ is used.
+
+        Examples:
+        | Query Contains No Slivers | SELECT * FROM my_areas | | |
+        | Query Contains No Slivers | SELECT * FROM my_areas | factor=0.05 | |
+        | Query Contains No Slivers | SELECT * FROM my_areas | geometry_column=my_geom | |
+        | Query Contains No Slivers | SELECT * FROM my_areas | factor=0.05 | geometry_column=my_geom |
+
+        """
+        statement = statement.rstrip(';')
+        self.__contains_no_slivers('({}) AS source'.format(statement), factor,
+                                   geometry_column)
+
+
+    def table_contains_no_slivers(self, tablename, factor=0.05,
+                                  geometry_column=None):
+        """
+        Tests whether the data in `tablename` contains 'slivers'
+
+        See `Query Contains No Slivers` for more information, with the
+        following changes:
+
+        If no `geometry_column` is supplied then it is searched for in the
+        database, if that fails then _wkb_geometry_ is used.
+
+        Examples:
+        | Table Contains No Slivers | my_areas | | |
+        | Table Contains No Slivers | my_areas | factor=0.05 | |
+        | Table Contains No Slivers | my_areas | geometry_column=my_geom | |
+        | Table Contains No Slivers | my_areas | factor=0.05 | geometry_column=my_geom |
+
+        """
+        if not geometry_column:
+            geometry_column = self.get_geometry_column(tablename)
+
+        self.__contains_no_slivers(tablename, factor, geometry_column)
 
 
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
