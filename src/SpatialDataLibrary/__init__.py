@@ -122,15 +122,33 @@ class SpatialDataLibrary(DatabaseLibrary):
         self.__extent_should_equal(tablename, extent, geometry_column)
 
 
-    def __contains_no_slivers(self, source, factor, geometry_column, columns):
-        assert factor < 1
-        logger.debug((source, factor, geometry_column, columns))
+    def __remove_geometry_from_columns(self, source, geometry_column,
+                                       query=False, return_expr=False):
+        if query:
+            columns = self.describe_data(source)
+        else:
+            columns = self.describe_table(source)
         column_names = []
         for column in columns:
             if column.name != geometry_column.strip('" '):
                 column_names.append('"{}"'.format(column.name))
-        column_expr = '''
+        if return_expr:
+            result =  '''
                 , '''.join(column_names)
+        else:
+            result = column_names
+        return result
+
+
+    def __contains_no_slivers(self, source, factor, geometry_column,
+                              query=False):
+        assert factor < 1
+        column_expr = self.__remove_geometry_from_columns(source,
+                                                          geometry_column,
+                                                          query=query,
+                                                          return_expr=True)
+        if query:
+            source = '({}) AS source'.format(source)
         statement = '''
             SELECT
                 {2}
@@ -184,9 +202,8 @@ class SpatialDataLibrary(DatabaseLibrary):
 
         """
         statement = statement.rstrip(';')
-        columns = self.describe_data(statement)
-        self.__contains_no_slivers('({}) AS source'.format(statement), factor,
-                                   geometry_column, columns)
+        self.__contains_no_slivers(statement, factor, geometry_column,
+                                   query=True)
 
 
     def table_contains_no_slivers(self, tablename, factor=0.05,
@@ -209,8 +226,7 @@ class SpatialDataLibrary(DatabaseLibrary):
         """
         if not geometry_column:
             geometry_column = self.get_geometry_column(tablename)
-        columns = self.describe_table(tablename)
-        self.__contains_no_slivers(tablename, factor, geometry_column, columns)
+        self.__contains_no_slivers(tablename, factor, geometry_column)
 
 
     def get_geometry(self, statement):
@@ -259,7 +275,7 @@ class SpatialDataLibrary(DatabaseLibrary):
 
     def should_not_intersect(self, geometryA, geometryB):
         """
-        Checks that two supplied geometries  do not intersect
+        Checks that two supplied geometries do not intersect
 
         Geometries must be specified as WKT strings, for example:
         | Should Intersect | LINESTRING ( 2 0, 0 2 ) | LINESTRING ( 0 0, 0 2 ) |
@@ -277,7 +293,7 @@ class SpatialDataLibrary(DatabaseLibrary):
     def should_intersect_query(self, geometry, statement,
                                geometry_column='wkb_geometry'):
         """
-        Checks that the `geometry` intersects with all features in `statement`
+        Checks that `geometry` intersects with at least one `statement` feature
 
         Geometries must be specified as WKT strings, for example:
         | Should Intersect Query | LINESTRING ( 2 0, 0 2 ) | SELECT * FROM my_points WHERE type = 1 |
@@ -286,8 +302,11 @@ class SpatialDataLibrary(DatabaseLibrary):
         | ${geomA} | Get Geometry | SELECT geom FROM my_areas WHERE id = 1 |
         | Should Intersect Query | ${geomA} | SELECT * FROM my_points WHERE type = 1 |
 
+        Note that the `geometry_column` should be the name of the column in
+        the results of the query.
+
         """
-        pass
+        geometry = self._value_to_text(geometry)
 
 
     def should_intersect_table(self, geometry, tablename,
