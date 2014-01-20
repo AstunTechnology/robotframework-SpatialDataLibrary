@@ -34,7 +34,8 @@ class SpatialDataLibrary(DatabaseLibrary):
         self._schema = None
         self._geometry_column = None
 
-    def get_geometry_column(self, table, default=GEOMETRY_COLUMN):
+    def get_geometry_column(self, table, schema=SCHEMA,
+                            default=GEOMETRY_COLUMN):
         """
         Finds the name for the geometry column for `table`.
 
@@ -69,7 +70,7 @@ class SpatialDataLibrary(DatabaseLibrary):
         except:
             pass
         if not srid:
-            srid = get_query_SRID(self, 'SELECT * FROM "{}"."{}"'.format(
+            srid = self.get_query_SRID('SELECT * FROM "{}"."{}"'.format(
                                   schema, table), geometry_column)
         return srid
 
@@ -356,7 +357,7 @@ class SpatialDataLibrary(DatabaseLibrary):
         intersect_sql = '''
             SELECT {0}
             FROM {1}
-            WHERE ST_Intersects(query."{2}", ST_GeomFromText({3}))
+            WHERE ST_Intersects("{2}", ST_GeomFromText({3}))
             ;'''.format(column_expr, s, geometry_column, geom)
 
         self.query_should_return_rows(intersect_sql)
