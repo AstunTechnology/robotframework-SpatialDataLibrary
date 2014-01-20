@@ -350,7 +350,8 @@ class SpatialDataLibrary(DatabaseLibrary):
             raise AssertionError('Geometries do not intersect')
 
 
-    def __test_intersect_rows(self, geometry, source, geometry_column, srid):
+    def __test_intersect_rows(self, geometry, source, geometry_column, srid,
+                              return_rows=True):
 
         if geometry[5:].upper() != 'SRID=':
             geometry = 'SRID={};{}'.format(srid, geometry)
@@ -365,7 +366,30 @@ class SpatialDataLibrary(DatabaseLibrary):
             WHERE ST_Intersects("{2}", ST_GeomFromText({3}))
             ;'''.format(column_expr, s, geometry_column, geom)
 
-        self.query_should_return_rows(intersect_sql)
+        if return_rows:
+            self.query_should_return_rows(intersect_sql)
+        else:
+            self.query_should_not_return_rows(intersect_sql)
+
+
+    def __test_no_disjoint_rows(self, geometry, source, geometry_column,
+                                srid):
+
+        if geometry[5:].upper() != 'SRID=':
+            geometry = 'SRID={};{}'.format(srid, geometry)
+        geom = self._value_to_text(geometry)
+        column_expr = self.__remove_geometry_from_columns(source,
+                                                          geometry_column,
+                                                          return_expr=True)
+        s = self.__format_source(source)
+        disjoint_sql = '''
+            SELECT {0}
+            FROM {1}
+            WHERE ST_Disjoint("{2}", ST_GeomFromText({3}))
+            ;'''.format(column_expr, s, geometry_column, geom)
+
+        self.query_should_not_return_rows(disjoint_sql)
+
 
     def should_intersect_query(self, geometry, statement,
                                geometry_column=GEOMETRY_COLUMN):
@@ -398,11 +422,11 @@ class SpatialDataLibrary(DatabaseLibrary):
         Check that `geometry` intersects with at least one feature in `table`
 
         Geometries must be specified as WKT strings, for example:
-        | Should Intersect Query | LINESTRING ( 2 0, 0 2 ) | my_points |
+        | Should Intersect Table | LINESTRING ( 2 0, 0 2 ) | my_points |
 
         This is probably more useful when used with `Get Geometry`:
         | ${geomA} | Get Geometry | SELECT geom FROM my_areas WHERE id = 1 |
-        | Should Intersect Query | ${geomA} | my_points |
+        | Should Intersect Table | ${geomA} | my_points |
 
         The `geometry_column` must be the name of the column in the results
         of the query. If not specified this is looked up in the database, if
@@ -420,6 +444,118 @@ class SpatialDataLibrary(DatabaseLibrary):
                                    geometry_column=geometry_column)
         self.__test_intersect_rows(geometry, (schema, table), geometry_column,
                                    srid)
+
+
+    def should_intersect_whole_query(self, geometry, statement,
+                               geometry_column=GEOMETRY_COLUMN):
+        """
+        Check that `geometry` intersects all `statement` features
+
+        Geometries must be specified as WKT strings, for example:
+        | Should Intersect Whole Query | LINESTRING ( 2 0, 0 2 ) | SELECT * FROM my_points WHERE type = 1 |
+
+        This is probably more useful when used with `Get Geometry`:
+        | ${geomA} | Get Geometry | SELECT geom FROM my_areas WHERE id = 1 |
+        | Should Intersect Whole Query | ${geomA} | SELECT * FROM my_points WHERE type = 1 |
+
+        The `geometry_column` must be the name of the column in the results
+        of the query. If not specified this defaults to GEOMETRY_COLUMN.
+
+        A single SRID for the query is assumed and the first returned row will
+        be used to obtain one for coercing `geometry` (assuming `geometry`
+        doesn't contain one).
+
+        """
+        statement = statement.rstrip(';')
+        srid = self.get_query_SRID(statement, geometry_column)
+        self.__test_no_disjoint_rows(geometry, statement, geometry_column,
+                                     srid)
+
+
+    def should_intersect_whole_table(self, geometry, table, schema=SCHEMA,
+                               geometry_column=None):
+        """
+        Check that `geometry` intersects with every feature in `table`
+
+        Geometries must be specified as WKT strings, for example:
+        | Should Intersect Whole Table | LINESTRING ( 2 0, 0 2 ) | my_points |
+
+        This is probably more useful when used with `Get Geometry`:
+        | ${geomA} | Get Geometry | SELECT geom FROM my_areas WHERE id = 1 |
+        | Should Intersect Whole Table | ${geomA} | my_points |
+
+        The `geometry_column` must be the name of the column in the results
+        of the query. If not specified this is looked up in the database, if
+        it cannot be found there, it defaults to GEOMETRY_COLUMN.
+
+        A single SRID for the query is assumed and, if the SRID cannot be
+        looked up in the database, the first returned row will be used to
+        obtain one for coercing `geometry` (if `geometry` itself doesn't
+        contain one).
+
+        """
+        if not geometry_column:
+            geometry_column = self.get_geometry_column(table, schema=schema)
+        srid = self.get_table_SRID(table, schema=schema,
+                                   geometry_column=geometry_column)
+        self.__test_no_disjoint_rows(geometry, (schema, table),
+                                     geometry_column, srid)
+
+
+    def should_not_intersect_query(self, geometry, statement,
+                                   geometry_column=GEOMETRY_COLUMN):
+        """
+        Check that `geometry` doesn't intersect with any `statement` features
+
+        Geometries must be specified as WKT strings, for example:
+        | Should Not Intersect Query | LINESTRING ( 2 0, 0 2 ) | SELECT * FROM my_points WHERE type = 1 |
+
+        This is probably more useful when used with `Get Geometry`:
+        | ${geomA} | Get Geometry | SELECT geom FROM my_areas WHERE id = 1 |
+        | Should Not Intersect Query | ${geomA} | SELECT * FROM my_points WHERE type = 1 |
+
+        The `geometry_column` must be the name of the column in the results
+        of the query. If not specified this defaults to GEOMETRY_COLUMN.
+
+        A single SRID for the query is assumed and the first returned row will
+        be used to obtain one for coercing `geometry` (assuming `geometry`
+        doesn't contain one).
+
+        """
+        statement = statement.rstrip(';')
+        srid = self.get_query_SRID(statement, geometry_column)
+        self.__test_intersect_rows(geometry, statement, geometry_column, srid,
+                                   return_rows=False)
+
+
+    def should_not_intersect_table(self, geometry, table, schema=SCHEMA,
+                                   geometry_column=None):
+        """
+        Check that `geometry` doesn't intersect with any features in `table`
+
+        Geometries must be specified as WKT strings, for example:
+        | Should Not Intersect Table | LINESTRING ( 2 0, 0 2 ) | my_points |
+
+        This is probably more useful when used with `Get Geometry`:
+        | ${geomA} | Get Geometry | SELECT geom FROM my_areas WHERE id = 1 |
+        | Should Not Intersect Table | ${geomA} | my_points |
+
+        The `geometry_column` must be the name of the column in the results
+        of the query. If not specified this is looked up in the database, if
+        it cannot be found there, it defaults to GEOMETRY_COLUMN.
+
+        A single SRID for the query is assumed and, if the SRID cannot be
+        looked up in the database, the first returned row will be used to
+        obtain one for coercing `geometry` (if `geometry` itself doesn't
+        contain one).
+
+        """
+        if not geometry_column:
+            geometry_column = self.get_geometry_column(table, schema=schema)
+        srid = self.get_table_SRID(table, schema=schema,
+                                   geometry_column=geometry_column)
+        self.__test_intersect_rows(geometry, (schema, table), geometry_column,
+                                   srid, return_rows=False)
 
 
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
