@@ -62,11 +62,12 @@ class SpatialDataLibrary(DatabaseLibrary):
         """
         Finds the SRID for `table`
         """
-        statement = 'SELECT Find_SRID({},{},{})'.format(schema, table,
+        statement = "SELECT Find_SRID('{}','{}','{}')".format(schema, table,
                                                         geometry_column)
         srid = None
         try:
             srid = self._get_single_result(statement)
+            logger.debug('SRID returned: {}'.format(srid))
         except:
             pass
         if not srid:
@@ -82,7 +83,9 @@ class SpatialDataLibrary(DatabaseLibrary):
         statement = statement.rstrip(';')
         srid_sql = 'SELECT ST_SRID("{}") FROM ({}) AS query LIMIT 1;'
         srid_sql = srid_sql.format(geometry_column, statement)
-        return self._get_single_result(srid_sql)
+        srid = self._get_single_result(srid_sql)
+        logger.debug('SRID returned: {}'.format(srid))
+        return srid
 
 
     def __format_source(self, source):
@@ -347,9 +350,11 @@ class SpatialDataLibrary(DatabaseLibrary):
             raise AssertionError('Geometries do not intersect')
 
 
-    def __test_intersect_rows(self, geometry, source, geometry_column):
+    def __test_intersect_rows(self, geometry, source, geometry_column, srid):
 
-        geom= self._value_to_text(geometry)
+        if geometry[5:].upper() != 'SRID=':
+            geometry = 'SRID={};{}'.format(srid, geometry)
+        geom = self._value_to_text(geometry)
         column_expr = self.__remove_geometry_from_columns(source,
                                                           geometry_column,
                                                           return_expr=True)
@@ -383,10 +388,8 @@ class SpatialDataLibrary(DatabaseLibrary):
 
         """
         statement = statement.rstrip(';')
-        if geometry[5:].upper() != 'SRID=':
-            srid = self.get_query_SRID(statement, geometry_column)
-            geometry = 'SRID={};{}'.format(srid, geometry)
-        self.__test_intersect_rows(geometry, statement, geometry_column)
+        srid = self.get_query_SRID(statement, geometry_column)
+        self.__test_intersect_rows(geometry, statement, geometry_column, srid)
 
 
     def should_intersect_table(self, geometry, table, schema=SCHEMA,
@@ -415,7 +418,8 @@ class SpatialDataLibrary(DatabaseLibrary):
             geometry_column = self.get_geometry_column(table, schema=schema)
         srid = self.get_table_SRID(table, schema=schema,
                                    geometry_column=geometry_column)
-        self.__test_intersect_rows(geometry, (schema, table), geometry_column)
+        self.__test_intersect_rows(geometry, (schema, table), geometry_column,
+                                   srid)
 
 
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
